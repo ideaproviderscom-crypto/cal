@@ -8,10 +8,13 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
 
+/* ★ header + 列ヘッダーをひとつのstickyラッパーにまとめる */
+.sticky-top {
+  position: sticky; top: 0; z-index: 100;
+}
 header {
   background: #1a1a2e; color: white;
   padding: 14px 16px 10px;
-  position: sticky; top: 0; z-index: 100;
 }
 .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 header h1 { font-size: 1rem; font-weight: 600; }
@@ -21,17 +24,24 @@ header h1 { font-size: 1rem; font-weight: 600; }
 .nav-btn { background: none; border: 1.5px solid rgba(255,255,255,0.3); color: white; width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 #monthLabel { font-size: 1.1rem; font-weight: 700; min-width: 120px; text-align: center; }
 
-/* テーブル */
-.table-wrap { overflow-x: hidden; }
-table { width: 100%; border-collapse: collapse; }
-thead th {
-  background: #2d2d44; color: white;
-  padding: 8px 4px; font-size: 0.72rem; font-weight: 600;
-  position: sticky; top: 0; z-index: 50;
+/* 列ヘッダーテーブル（sticky-top内） */
+.col-header-tbl {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  background: #2d2d44;
 }
-thead th:nth-child(1) { width: 40%; }
-thead th:nth-child(2) { width: 20%; text-align: center; }
-thead th:nth-child(3) { width: 40%; }
+.col-header-tbl th {
+  color: white; padding: 8px 4px; font-size: 0.72rem; font-weight: 600;
+}
+.col-header-tbl th:nth-child(1) { width: 40%; text-align: right; padding-right: 12px; }
+.col-header-tbl th:nth-child(2) { width: 20%; text-align: center; }
+.col-header-tbl th:nth-child(3) { width: 40%; text-align: left; padding-left: 12px; }
+
+/* メインテーブル */
+.table-wrap { overflow-x: hidden; }
+.cal-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cal-tbl col:nth-child(1) { width: 40%; }
+.cal-tbl col:nth-child(2) { width: 20%; }
+.cal-tbl col:nth-child(3) { width: 40%; }
 
 tbody tr { border-bottom: 1px solid #e5e7eb; }
 tbody tr:last-child { border-bottom: none; }
@@ -91,26 +101,32 @@ tr.today .date-cell .holiday-name { color: #fef9c3; }
 </head>
 <body>
 
-<header>
-  <div class="header-top">
-    <h1>📅 予定共有カレンダー <span id="syncStatus"></span></h1>
-  </div>
-  <div class="month-nav">
-    <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
-    <div id="monthLabel"></div>
-    <button class="nav-btn" onclick="changeMonth(1)">›</button>
-  </div>
-</header>
+<!-- ★ sticky-top: header + 列ヘッダーをひとかたまりに -->
+<div class="sticky-top">
+  <header>
+    <div class="header-top">
+      <h1>📅 予定共有カレンダー <span id="syncStatus"></span></h1>
+    </div>
+    <div class="month-nav">
+      <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+      <div id="monthLabel"></div>
+      <button class="nav-btn" onclick="changeMonth(1)">›</button>
+    </div>
+  </header>
+  <table class="col-header-tbl">
+    <tr>
+      <th>貴裕の予定</th>
+      <th>日付</th>
+      <th>恵の予定</th>
+    </tr>
+  </table>
+</div>
 
 <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:right;padding-right:12px;">貴裕の予定</th>
-        <th>日付</th>
-        <th style="text-align:left;padding-left:12px;">恵の予定</th>
-      </tr>
-    </thead>
+  <table class="cal-tbl">
+    <colgroup>
+      <col><col><col>
+    </colgroup>
     <tbody id="calBody"></tbody>
   </table>
 </div>
@@ -176,7 +192,7 @@ const STORE_KEY = 'fam_cal_v1';
 let currentYear, currentMonth;
 let holidays = {};
 let editingDate = null;
-let editingWho = null; // 'mine' or 'wife'
+let editingWho = null;
 
 function loadData(){
   try{ const d=JSON.parse(localStorage.getItem(STORE_KEY)); return d||{}; }
@@ -200,7 +216,6 @@ function setEntry(dateStr, who, text){
   saveData(data);
 }
 
-// 祝日取得
 async function fetchHolidays(){
   try{
     const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
@@ -271,7 +286,6 @@ function changeMonth(delta){
   renderCal();
 }
 
-// モーダル
 function openModal(dateStr, who){
   editingDate = dateStr;
   editingWho = who;
@@ -308,12 +322,6 @@ document.getElementById('modalText').addEventListener('keydown', e=>{
   if(e.key==='Enter' && e.metaKey) saveEntry();
 });
 
-// stickyヘッダーのtopをheader実高さに合わせる
-function updateStickyTop() {
-  const h = document.querySelector('header')?.offsetHeight || 0;
-  document.querySelectorAll('thead th').forEach(th => th.style.top = h + 'px');
-}
-
 // 初期化
 const now = new Date();
 currentYear = now.getFullYear();
@@ -321,8 +329,6 @@ currentMonth = now.getMonth();
 renderCal();
 fetchHolidays();
 syncFromGist();
-updateStickyTop();
-window.addEventListener('resize', updateStickyTop);
 </script>
 </body>
 </html>
