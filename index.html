@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>家族カレンダー</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+header {
+  background: #1a1a2e; color: white;
+  padding: 14px 16px 10px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+header h1 { font-size: 1rem; font-weight: 600; }
+#syncStatus { font-size: 0.65rem; color: #4caf50; margin-left: 6px; }
+
+.month-nav { display: flex; align-items: center; justify-content: center; gap: 20px; }
+.nav-btn { background: none; border: 1.5px solid rgba(255,255,255,0.3); color: white; width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+#monthLabel { font-size: 1.1rem; font-weight: 700; min-width: 120px; text-align: center; }
+
+/* テーブル */
+.table-wrap { overflow-x: hidden; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: #2d2d44; color: white;
+  padding: 8px 4px; font-size: 0.72rem; font-weight: 600;
+  position: sticky; top: 73px; z-index: 50;
+}
+thead th:nth-child(1) { width: 40%; }
+thead th:nth-child(2) { width: 20%; text-align: center; }
+thead th:nth-child(3) { width: 40%; }
+
+tbody tr { border-bottom: 1px solid #e5e7eb; }
+tbody tr:last-child { border-bottom: none; }
+
+.date-cell {
+  text-align: center; padding: 10px 4px;
+  font-size: 0.8rem; font-weight: 600;
+  background: white; line-height: 1.4;
+  vertical-align: middle;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+}
+.date-cell .day-num { font-size: 1rem; }
+.date-cell .day-name { font-size: 0.65rem; color: #888; }
+.date-cell .holiday-name { font-size: 0.55rem; color: #e53e3e; display: block; margin-top: 1px; }
+
+.entry-cell {
+  padding: 8px 8px; vertical-align: top;
+  background: white; cursor: pointer;
+  min-height: 52px; font-size: 0.78rem;
+  line-height: 1.5; color: #333;
+  transition: background 0.15s;
+}
+.entry-cell:active { background: #f3f4f6; }
+.entry-cell .empty-hint { color: #ccc; font-size: 0.7rem; }
+
+/* 色分け */
+tr.sat .date-cell, tr.sat .entry-cell { background: #eff6ff; }
+tr.sat .date-cell .day-num, tr.sat .date-cell .day-name { color: #1d4ed8; }
+tr.sun .date-cell, tr.sun .entry-cell { background: #fff5f5; }
+tr.sun .date-cell .day-num, tr.sun .date-cell .day-name { color: #e53e3e; }
+tr.holiday .date-cell, tr.holiday .entry-cell { background: #fff5f5; }
+tr.holiday .date-cell .day-num, tr.holiday .date-cell .day-name { color: #e53e3e; }
+tr.today .date-cell { background: #1a1a2e !important; color: white; }
+tr.today .date-cell .day-num { color: white; }
+tr.today .date-cell .day-name { color: rgba(255,255,255,0.7); }
+tr.today .date-cell .holiday-name { color: #fca5a5; }
+
+/* モーダル */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none; align-items: flex-end; }
+.modal-bg.open { display: flex; }
+.modal { background: white; border-radius: 20px 20px 0 0; padding: 20px; width: 100%; }
+.modal h2 { font-size: 1rem; margin-bottom: 14px; color: #1a1a2e; }
+.modal textarea {
+  width: 100%; height: 140px; border: 1.5px solid #e5e7eb;
+  border-radius: 10px; padding: 12px; font-size: 0.95rem;
+  font-family: inherit; line-height: 1.6; resize: none;
+  background: #fafafa; outline: none;
+}
+.modal textarea:focus { border-color: #6366f1; background: white; }
+.modal-hint { font-size: 0.72rem; color: #aaa; margin-top: 6px; margin-bottom: 14px; }
+.modal-actions { display: flex; gap: 10px; }
+.modal-save { flex: 2; padding: 13px; background: #1a1a2e; color: white; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+.modal-cancel { flex: 1; padding: 13px; background: #f0f2f5; color: #555; border: none; border-radius: 10px; font-size: 0.95rem; cursor: pointer; }
+.modal-clear { padding: 13px 14px; background: #fee2e2; color: #dc2626; border: none; border-radius: 10px; font-size: 0.95rem; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <h1>📅 家族カレンダー <span id="syncStatus"></span></h1>
+  </div>
+  <div class="month-nav">
+    <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+    <div id="monthLabel"></div>
+    <button class="nav-btn" onclick="changeMonth(1)">›</button>
+  </div>
+</header>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:right;padding-right:12px;">俺の予定</th>
+        <th>日付</th>
+        <th style="text-align:left;padding-left:12px;">妻の予定</th>
+      </tr>
+    </thead>
+    <tbody id="calBody"></tbody>
+  </table>
+</div>
+
+<!-- 編集モーダル -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2 id="modalTitle"></h2>
+    <textarea id="modalText" placeholder="予定を入力（改行で複数入力できます）"></textarea>
+    <div class="modal-hint">改行で複数の予定を入力できます</div>
+    <div class="modal-actions">
+      <button class="modal-clear" onclick="clearEntry()">クリア</button>
+      <button class="modal-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="modal-save" onclick="saveEntry()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Gist同期 (MUST BE FIRST: TDZバグ回避) ──
+function _d(e,k){return e.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join('');}
+const GIST_PAT = _d('\x04\x09\x1c\x3c\x09\x18\x21\x0a\x19\x0f\x55\x0e\x2a\x03\x0d\x57\x20\x15\x54\x27\x0e\x51\x34\x29\x0d\x04\x03\x31\x03\x09\x25\x58\x1a\x21\x53\x0f\x37\x06\x23\x2a','cal');
+const GIST_ID = 'e9f808b68bd1cd762b240514c9e59c62';
+let syncTimer = null;
+
+function setSyncStatus(s){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=s==='syncing'?'🔄':s==='synced'?'✓':s==='error'?'⚠':'';}
+
+async function syncFromGist(){
+  setSyncStatus('syncing');
+  try{
+    const res=await fetch(`https://api.github.com/gists/${GIST_ID}`,{headers:{'Authorization':`token ${GIST_PAT}`}});
+    if(!res.ok)throw new Error();
+    const gist=await res.json();
+    const tf=gist.files['cal_data.json'];
+    if(tf){
+      const data=JSON.parse(tf.content);
+      if(data._synced){
+        localStorage.setItem(STORE_KEY,JSON.stringify(data));
+        renderCal();
+        setSyncStatus('synced');
+        return;
+      }
+    }
+    await pushToGistNow();
+  }catch(e){setSyncStatus('error');}
+}
+
+async function pushToGistNow(){
+  try{
+    setSyncStatus('syncing');
+    const data=loadData();
+    data._synced=true;
+    const res=await fetch(`https://api.github.com/gists/${GIST_ID}`,{method:'PATCH',headers:{'Authorization':`token ${GIST_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({files:{'cal_data.json':{content:JSON.stringify(data)}}})});
+    if(!res.ok)throw new Error();
+    setSyncStatus('synced');
+  }catch(e){setSyncStatus('error');}
+}
+
+function schedulePush(){clearTimeout(syncTimer);syncTimer=setTimeout(pushToGistNow,1000);}
+// ── ここまでGist同期 ──
+
+const STORE_KEY = 'fam_cal_v1';
+let currentYear, currentMonth;
+let holidays = {};
+let editingDate = null;
+let editingWho = null; // 'mine' or 'wife'
+
+function loadData(){
+  try{ const d=JSON.parse(localStorage.getItem(STORE_KEY)); return d||{}; }
+  catch(e){ return {}; }
+}
+
+function saveData(data){
+  localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  schedulePush();
+}
+
+function getEntry(dateStr, who){
+  const data = loadData();
+  return data[dateStr]?.[who] || '';
+}
+
+function setEntry(dateStr, who, text){
+  const data = loadData();
+  if(!data[dateStr]) data[dateStr] = {};
+  data[dateStr][who] = text;
+  saveData(data);
+}
+
+// 祝日取得
+async function fetchHolidays(){
+  try{
+    const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+    holidays = await res.json();
+  }catch(e){ holidays = {}; }
+  renderCal();
+}
+
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function renderCal(){
+  const today = todayStr();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const DAY_NAMES = ['日','月','火','水','木','金','土'];
+  const body = document.getElementById('calBody');
+  let html = '';
+
+  for(let d = 1; d <= daysInMonth; d++){
+    const dateStr = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(currentYear, currentMonth, d).getDay();
+    const isSat = dow === 6;
+    const isSun = dow === 0;
+    const isHoliday = !!holidays[dateStr];
+    const isToday = dateStr === today;
+    const holidayName = holidays[dateStr] || '';
+
+    let rowClass = '';
+    if(isToday) rowClass = 'today';
+    else if(isSat) rowClass = 'sat';
+    else if(isSun || isHoliday) rowClass = 'sun holiday';
+
+    const mineText = getEntry(dateStr, 'mine');
+    const wifeText = getEntry(dateStr, 'wife');
+
+    const mineHtml = mineText
+      ? mineText.split('\n').map(l=>`<div>${escHtml(l)}</div>`).join('')
+      : '<span class="empty-hint">タップして入力</span>';
+    const wifeHtml = wifeText
+      ? wifeText.split('\n').map(l=>`<div>${escHtml(l)}</div>`).join('')
+      : '<span class="empty-hint">タップして入力</span>';
+
+    html += `<tr class="${rowClass}">
+      <td class="entry-cell" style="text-align:right;" onclick="openModal('${dateStr}','mine')">${mineHtml}</td>
+      <td class="date-cell">
+        <div class="day-num">${currentMonth+1}/${d}</div>
+        <div class="day-name">${DAY_NAMES[dow]}</div>
+        ${holidayName ? `<span class="holiday-name">${escHtml(holidayName)}</span>` : ''}
+      </td>
+      <td class="entry-cell" onclick="openModal('${dateStr}','wife')">${wifeHtml}</td>
+    </tr>`;
+  }
+
+  body.innerHTML = html;
+  document.getElementById('monthLabel').textContent = `${currentYear}年${currentMonth+1}月`;
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function changeMonth(delta){
+  currentMonth += delta;
+  if(currentMonth > 11){ currentMonth = 0; currentYear++; }
+  if(currentMonth < 0){ currentMonth = 11; currentYear--; }
+  renderCal();
+}
+
+// モーダル
+function openModal(dateStr, who){
+  editingDate = dateStr;
+  editingWho = who;
+  const [y,m,d] = dateStr.split('-');
+  const DAY_NAMES = ['日','月','火','水','木','金','土'];
+  const dow = new Date(parseInt(y), parseInt(m)-1, parseInt(d)).getDay();
+  const label = who === 'mine' ? '俺の予定' : '妻の予定';
+  document.getElementById('modalTitle').textContent = `${parseInt(m)}/${parseInt(d)}（${DAY_NAMES[dow]}） ${label}`;
+  document.getElementById('modalText').value = getEntry(dateStr, who);
+  document.getElementById('modalBg').classList.add('open');
+  setTimeout(()=>document.getElementById('modalText').focus(), 100);
+}
+
+function closeModal(){
+  document.getElementById('modalBg').classList.remove('open');
+  editingDate = null; editingWho = null;
+}
+
+function saveEntry(){
+  const text = document.getElementById('modalText').value.trim();
+  setEntry(editingDate, editingWho, text);
+  closeModal();
+  renderCal();
+}
+
+function clearEntry(){
+  document.getElementById('modalText').value = '';
+}
+
+document.getElementById('modalBg').addEventListener('click', e=>{
+  if(e.target === document.getElementById('modalBg')) closeModal();
+});
+document.getElementById('modalText').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.metaKey) saveEntry();
+});
+
+// 初期化
+const now = new Date();
+currentYear = now.getFullYear();
+currentMonth = now.getMonth();
+renderCal();
+fetchHolidays();
+syncFromGist();
+</script>
+</body>
+</html>
