@@ -233,6 +233,7 @@ function todayStr(){
 }
 
 function renderCal(){
+  const scrollY = window.scrollY; // スクロール位置を保存
   const today = todayStr();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const DAY_NAMES = ['日','月','火','水','木','金','土'];
@@ -276,6 +277,7 @@ function renderCal(){
 
   body.innerHTML = html;
   document.getElementById('monthLabel').textContent = `${currentYear}年${currentMonth+1}月`;
+  window.scrollTo(0, scrollY); // スクロール位置を復元
 }
 
 function escHtml(s){
