@@ -27,7 +27,7 @@ table { width: 100%; border-collapse: collapse; }
 thead th {
   background: #2d2d44; color: white;
   padding: 8px 4px; font-size: 0.72rem; font-weight: 600;
-  position: sticky; top: 88px; z-index: 50;
+  position: sticky; top: 0; z-index: 50;
 }
 thead th:nth-child(1) { width: 40%; }
 thead th:nth-child(2) { width: 20%; text-align: center; }
@@ -308,6 +308,12 @@ document.getElementById('modalText').addEventListener('keydown', e=>{
   if(e.key==='Enter' && e.metaKey) saveEntry();
 });
 
+// stickyヘッダーのtopをheader実高さに合わせる
+function updateStickyTop() {
+  const h = document.querySelector('header')?.offsetHeight || 0;
+  document.querySelectorAll('thead th').forEach(th => th.style.top = h + 'px');
+}
+
 // 初期化
 const now = new Date();
 currentYear = now.getFullYear();
@@ -315,6 +321,8 @@ currentMonth = now.getMonth();
 renderCal();
 fetchHolidays();
 syncFromGist();
+updateStickyTop();
+window.addEventListener('resize', updateStickyTop);
 </script>
 </body>
 </html>
