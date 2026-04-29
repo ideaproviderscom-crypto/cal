@@ -154,8 +154,18 @@ function _d(e,k){return e.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(
 const GIST_PAT = _d('\x04\x09\x1c\x3c\x09\x18\x21\x0a\x19\x0f\x55\x0e\x2a\x03\x0d\x57\x20\x15\x54\x27\x0e\x51\x34\x29\x0d\x04\x03\x31\x03\x09\x25\x58\x1a\x21\x53\x0f\x37\x06\x23\x2a','cal');
 const GIST_ID = 'e9f808b68bd1cd762b240514c9e59c62';
 let syncTimer = null;
+let syncFailCount = 0;
 
-function setSyncStatus(s){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=s==='syncing'?'🔄':s==='synced'?'✓':s==='error'?'⚠':'';}
+function setSyncStatus(s){
+  const el=document.getElementById('syncStatus');if(!el)return;
+  if(s==='syncing'){el.textContent='🔄';el.style.color='#4caf50';}
+  else if(s==='synced'){el.textContent='✓';el.style.color='#4caf50';syncFailCount=0;}
+  else if(s==='error'){
+    syncFailCount++;
+    if(syncFailCount>=3){el.textContent='⚠️ 同期失敗';el.style.color='#ff4444';}
+    else{el.textContent='⚠';el.style.color='#ff9800';}
+  }
+}
 
 async function syncFromGist(){
   setSyncStatus('syncing');
@@ -165,9 +175,18 @@ async function syncFromGist(){
     const gist=await res.json();
     const tf=gist.files['cal_data.json'];
     if(tf){
-      const data=JSON.parse(tf.content);
-      if(data._synced){
-        localStorage.setItem(STORE_KEY,JSON.stringify(data));
+      const gistData=JSON.parse(tf.content);
+      if(gistData._synced){
+        const localRaw=localStorage.getItem(STORE_KEY);
+        const localData=localRaw?JSON.parse(localRaw):null;
+        // ローカルが新しければGistに上げて返す
+        if(localData?._lastModified && gistData._lastModified &&
+           localData._lastModified > gistData._lastModified){
+          await pushToGistNow(); return;
+        }
+        // バックアップしてから上書き
+        if(localRaw) localStorage.setItem(STORE_KEY+'_backup', localRaw);
+        localStorage.setItem(STORE_KEY,JSON.stringify(gistData));
         renderCal();
         setSyncStatus('synced');
         return;
@@ -182,6 +201,7 @@ async function pushToGistNow(){
     setSyncStatus('syncing');
     const data=loadData();
     data._synced=true;
+    data._lastModified=data._lastModified||Date.now();
     const res=await fetch(`https://api.github.com/gists/${GIST_ID}`,{method:'PATCH',headers:{'Authorization':`token ${GIST_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({files:{'cal_data.json':{content:JSON.stringify(data)}}})});
     if(!res.ok)throw new Error();
     setSyncStatus('synced');
@@ -203,6 +223,7 @@ function loadData(){
 }
 
 function saveData(data){
+  data._lastModified = Date.now();
   localStorage.setItem(STORE_KEY, JSON.stringify(data));
   schedulePush();
 }
