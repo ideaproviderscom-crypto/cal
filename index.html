@@ -198,18 +198,29 @@ async function syncFromGist(){
 }
 
 async function pushToGistNow(){
+  clearTimeout(syncTimer);syncTimer=null;
   try{
     setSyncStatus('syncing');
     const data=loadData();
     data._synced=true;
     data._lastModified=data._lastModified||Date.now();
-    const res=await fetch(`https://api.github.com/gists/${GIST_ID}`,{method:'PATCH',headers:{'Authorization':`token ${GIST_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({files:{'cal_data.json':{content:JSON.stringify(data)}}})});
+    const res=await fetch(`https://api.github.com/gists/${GIST_ID}`,{method:'PATCH',keepalive:true,headers:{'Authorization':`token ${GIST_PAT}`,'Content-Type':'application/json'},body:JSON.stringify({files:{'cal_data.json':{content:JSON.stringify(data)}}})});
     if(!res.ok)throw new Error();
     setSyncStatus('synced');
   }catch(e){setSyncStatus('error');}
 }
 
 function schedulePush(){clearTimeout(syncTimer);syncTimer=setTimeout(pushToGistNow,1000);}
+
+// 画面を閉じる/切り替える時：未送信のpushを即時実行（keepaliveで離脱後も送信継続）
+// 画面に戻った時：他端末の変更を取り込む
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){ if(syncTimer) pushToGistNow(); }
+  else if(!syncTimer){ syncFromGist(); }
+});
+window.addEventListener('pagehide',()=>{ if(syncTimer) pushToGistNow(); });
+// 共有カレンダーなので60秒ごとに相手の変更を取り込む（編集待機中はスキップ）
+setInterval(()=>{ if(!syncTimer && document.visibilityState==='visible') syncFromGist(); }, 60000);
 // ── ここまでGist同期 ──
 
 let currentYear, currentMonth;
